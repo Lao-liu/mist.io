@@ -104,7 +104,7 @@ def get_auth_header(user):
     """The value created here is added as an "Authorization" header in HTTP
     requests towards the hosted mist core service.
     """
-    return "mist_1 %s:%s" % (user.email, user.mist_api_token)
+    return user.mist_api_token
 
 
 def parse_ping(stdout):
@@ -152,7 +152,7 @@ def parse_ping(stdout):
 
 def amqp_publish(exchange, routing_key, data,
                  ex_type='fanout', ex_declare=False):
-    connection = Connection()
+    connection = Connection(config.AMQP_URI)
     channel = connection.channel()
     if ex_declare:
         channel.exchange_declare(exchange=exchange, type=ex_type)
@@ -174,7 +174,7 @@ def amqp_subscribe(exchange, callback, queue='',
             return func(msg)
         return wrapped
 
-    connection = Connection()
+    connection = Connection(config.AMQP_URI)
     channel = connection.channel()
     channel.exchange_declare(exchange=exchange, type=ex_type, auto_delete=true)
     resp = channel.queue_declare(queue, exclusive=True)
@@ -222,7 +222,7 @@ def amqp_subscribe_user(user, queue, callback):
 
 
 def amqp_user_listening(user):
-    connection = Connection()
+    connection = Connection(config.AMQP_URI)
     channel = connection.channel()
     try:
         channel.exchange_declare(exchange=_amqp_user_exchange(user),
@@ -236,7 +236,7 @@ def amqp_user_listening(user):
         connection.close()
 
 
-def trigger_session_update(email, sections=['backends', 'keys', 'monitoring']):
+def trigger_session_update(email, sections=['clouds', 'keys', 'monitoring']):
     amqp_publish_user(email, routing_key='update', data=sections)
 
 

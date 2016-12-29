@@ -1,20 +1,19 @@
 @images
 Feature: Actions for Images
 
-  Background:
+  Scenario: Star image from Advanced search
     When I visit mist.io
     Then I wait for the mist.io splash page to load
-    Given "EC2" backend added
-
-  Scenario: Star image from Advanced search
-    When I click the button "Images"
-    Then Images list should be loaded within 30 seconds
-    And there should be starred Images
-    When I search for a "django" Image
-    And I click the button "Continue search on server"
-    Then Images list should be loaded within 60 seconds
-
-#    When I star an Image that contains "django"
-#    And I clear the Images search bar
-#    Then Images list should be loaded within 30 seconds
-#    And an Image that contains "django" should be starred
+    Given "EC2" cloud has been added
+    When I visit the Images page after the counter has loaded
+    Then there should be starred Images
+    When I search for the "bitnami" Image
+    And I click the button "Load more"
+    Then the images list should be loaded within 100 seconds
+    When I star an image that contains "bitnami"
+    And I clear the Images search bar
+    Then the images list should be loaded within 100 seconds
+    When I scroll down until all starred images appear
+    Then an image that contains "the_image_name_i_starred" should be starred
+    When I focus on the "the_image_name_i_starred" button
+    Then I unstar the image that contains "the_image_name_i_starred"

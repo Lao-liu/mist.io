@@ -8,16 +8,16 @@ define('app/models/machine', ['ember'],
     function() {
         return Ember.Object.extend({
 
-            /**
-             *  Properties
-             */
+            //
+            //  Properties
+            //
 
             id: null,
             name: null,
             probed: null,
             keysCount: 0,
             probing: null,
-            backend: null,
+            cloud: null,
             selected: null,
             hasMonitoring: null,
             probeInterval: 30000,
@@ -53,13 +53,70 @@ define('app/models/machine', ['ember'],
                 stdout: null,
             }),
 
+
+            //
+            //  Computed Properties
+            //
+
+            cannotHaveMonitoring: Ember.computed('state', function() {
+                var invalids = ['error', 'stopped', 'terminated', 'undefining', 'pending', 'rebooting'];
+                return invalids.indexOf(this.get('state')) > -1;
+            }),
+
+            cannotHaveProbe: Ember.computed('state', function() {
+                return this.get('state') == 'terminated';
+            }),
+
+            incidents: function () {
+                return incidents = Mist.openIncidents.filterBy('machineId', this.get('id'));
+            }.property('Mist.openIncidents.@each.machine'),
+
+            stateWeight: function () {
+                var weight = 0,
+                    states = {
+                        error: 6,
+                        pending: 5,
+                        rebooting: 4,
+                        running: 3,
+                        unknown: 2,
+                        suspended: 2,
+                        terminated: 1,
+                        undefining: 1,
+                        stopped: 0
+                    };
+
+                weight = 100000 * states[this.get('state')];
+
+                if(this.get('hasMonitoring')) {
+                    var openIncidents = 0;
+                    if (this.get('hasOpenIncident')) {
+                        this.get('incidents').forEach(function(incident) {
+                            if(!incident.get('isClosed')) openIncidents += 1;
+                        });
+                    }
+                    weight += 10000 * (1 + openIncidents/100);
+                }
+
+                if(this.get('probed')) {
+                    if(this.get('loadavg1')>0)
+                        weight += 1000 * (1 + (this.get('cores')/this.get('loadavg1')/100));
+                    weight += 100 * (1 + this.get('loss')/100) + 10 * (1 + this.get('latency')/10000);
+                }
+
+                return weight;
+            }.property('state', 'hasMonitoring', 'hasOpenIncident', 'incidents', 'loadavg1', 'loss', 'latency'),
+
             isUnknown: function () {
                 return this.get('state') == 'unknown';
             }.property('state'),
 
-            /**
-             *  Computed Properties
-             */
+            isRunning: function () {
+                return this.get('state') == 'running';
+            }.property('state'),
+
+            hasNotActions: Ember.computed('can_start', 'can_reboot', 'can_destroy', 'can_shutdown', 'can_rename', 'can_undefine', 'can_suspend', 'can_resume', function() {
+                return !this.get('can_start') && !this.get('can_reboot') && !this.get('can_destroy') && !this.get('can_shutdown') && !this.get('can_rename') && !this.get('can_undefine') && !this.get('can_suspend') && !this.get('can_resume');
+            }),
 
             netled1: function() {
                 if (this.latency > 0 &&  this.latency < 1000) return 'on';
@@ -90,19 +147,16 @@ define('app/models/machine', ['ember'],
             },
 
             image: function() {
-                return this.get('backend').get('images').getObject(this.imageId);
+                return this.get('cloud').get('images').getObject(this.imageId);
             }.property('imageId'),
 
-
             hasShell: function () {
-                return this.get('hasKeys') || this.get('backend').get('isDocker');
-            }.property('hasKeys', 'backend.isDocker'),
-
+                return (this.get('hasKeys') || this.get('cloud').get('isDocker')) && this.get('isRunning');
+            }.property('hasKeys', 'isRunning', 'cloud.isDocker'),
 
             hasKeys: function () {
                 return !!Mist.keysController.getMachineKeysCount(this);
-            }.property('Mist.keysController.content.@each.machines'),
-
+            }.property('keysCount'),
 
             hasOpenIncident: function () {
                 if (!Mist.openIncidents) {
@@ -112,28 +166,23 @@ define('app/models/machine', ['ember'],
                 if (!incident)
                     return false;
                 return !incident.get('isClosed');
-            }.property('Mist.openIncidents.@each.machine'),
-
+            }.property('Mist.openIncidents.[].machine'),
 
             isWindows: function () {
                 return this.get('extra') && this.get('extra').os_type == 'windows';
             }.property('extra'),
 
-
             isCoreos: function () {
                 return this.get('extra') && this.get('extra').os_type == 'coreos';
             }.property('extra'),
-
 
             canConnect: function () {
                 return this.get('isWindows') || this.get('hasShell');
             }.property('isWindows', 'hasShell'),
 
-
             connectText: function () {
                 return this.get('isWindows') ? 'Connect' : 'Shell';
             }.property('isWindows'),
-
 
             host: function () {
                 var ips_v4 = [];
@@ -157,7 +206,7 @@ define('app/models/machine', ['ember'],
                 if (!this.get('isWindows'))
                     return '';
                 var port = this.get('extra').remote_desktop_port || 3389;
-                var url = '/backends/' + this.get('backend.id') +
+                var url = '/clouds/' + this.get('cloud.id') +
                     '/machines/' + this.get('id') + '/rdp?' +
                     'host=' + this.get('host') + '&' +
                     'rdp_port=' + port;
@@ -165,40 +214,45 @@ define('app/models/machine', ['ember'],
             }.property('isWindows', 'host', 'extra'),
 
 
-            /**
-             *
-             *  Methods
-             *
-             */
+            //
+            //  Methods
+            //
 
             shutdown: function(callback) {
-                this.backend.shutdownMachine(this.id, callback);
+                this.cloud.shutdownMachine(this.id, callback);
             },
-
 
             destroy: function(callback) {
-                this.backend.destroyMachine(this.id, callback);
+                this.cloud.destroyMachine(this.id, callback);
             },
-
 
             reboot: function(callback) {
-                this.backend.rebootMachine(this.id, callback);
+                this.cloud.rebootMachine(this.id, callback);
             },
 
+            undefine: function(callback) {
+                this.cloud.undefineMachine(this.id, callback);
+            },
+
+            suspend: function(callback) {
+                this.cloud.suspendMachine(this.id, callback);
+            },
+
+            resume: function(callback) {
+                this.cloud.resumeMachine(this.id, callback);
+            },
 
             start: function(callback) {
-                this.backend.startMachine(this.id, callback);
+                this.cloud.startMachine(this.id, callback);
             },
 
             rename: function(callback) {
-                this.backend.renameMachine(this.id,callback);
+                this.cloud.renameMachine(this.id,callback);
             },
-
 
             waitFor: function(state) {
                 this.set('waitState', state);
             },
-
 
             lockOn: function(state) {
                 this.set('prevState', this.state);
@@ -206,30 +260,26 @@ define('app/models/machine', ['ember'],
                 this.set('state', state);
             },
 
-
             restoreState: function() {
                 this.set('waitState', null);
                 this.set('state', this.prevState);
             },
-
 
             equals: function (machine) {
                 if (typeof machine == 'string')
                     return machine == this.id;
                 if (machine instanceof Array)
                     if (machine[1] == this.id &&
-                        machine[0] == this.backend.id)
+                        machine[0] == this.cloud.id)
                             return true;
                 if (machine instanceof Object)
                     if (machine.id == this.id &&
-                        machine.backend.id == this.backend.id)
+                        machine.cloud.id == this.cloud.id)
                             return true;
                 return false;
             },
 
-
             getHost: function() {
-
                 if (this.extra && this.extra.dns_name) {
                     // it is an ec2 machine so it has dns_name
                     return this.extra.dns_name;
@@ -253,10 +303,10 @@ define('app/models/machine', ['ember'],
             },
 
             probe: function(keyId, callback) {
-                if (!this.backend.enabled) return;
+                if (!this.cloud.enabled) return;
                 if (this.state != 'running') return;
                 var that = this;
-                Mist.backendsController.probeMachine(that, keyId, function(success) {
+                Mist.cloudsController.probeMachine(that, keyId, function(success) {
                     if (callback) {
                         callback(success);
                     }
@@ -264,7 +314,6 @@ define('app/models/machine', ['ember'],
             },
 
             probeSuccess: function(data) {
-
                 function loadToColor(load, cores) {
                     var weightedLoad = load / cores;
                     if (weightedLoad > 1.2) {
@@ -279,7 +328,7 @@ define('app/models/machine', ['ember'],
                         return 'cold';
                     }
                 }
-                if (!this.backend || !this.backend.enabled) return;
+                if (!this.cloud || !this.cloud.enabled) return;
                 if (data.uptime) {
                     uptime = parseFloat(data.uptime.split(' ')[0]) * 1000;
                     this.set('uptimeChecked', new Date(data.timestamp * 1000));
@@ -311,13 +360,13 @@ define('app/models/machine', ['ember'],
                 this.set('loss', data.packets_loss || this.loss);
                 this.set('latency', data.rtt_avg ? Math.floor(data.rtt_avg) : this.latency);
                 this.set('df', data.df || this.df);
-                Mist.backendsController.trigger('onMachineProbe', this);
+                Mist.cloudsController.trigger('onMachineProbe', this);
             },
-            /**
-             *
-             *  Observers
-             *
-             */
+
+
+            //
+            //  Observers
+            //
 
             stateObserver: function() {
                 if (this.waitState) {

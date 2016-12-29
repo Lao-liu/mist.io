@@ -1,10 +1,10 @@
-define('app/views/script_add', ['app/views/panel'],
+define('app/views/script_add', ['app/views/controlled'],
     //
     //  Script Add View
     //
     //  @returns Class
     //
-    function (PanelView) {
+    function(ControlledComponent) {
 
         'use strict';
 
@@ -14,19 +14,18 @@ define('app/views/script_add', ['app/views/panel'],
         var DEFAULT_ANSIBLE_SCRIPT = '- name: Dummy ansible playbook\n' +
             '  hosts: localhost\n' +
             '  tasks:\n' +
-            '  - name: Dummy task\n' +
-            '    debug:\n' +
-            '      msg: "Hello World"\n';
+            '    - name: Dummy task\n' +
+            '      debug:\n' +
+            '        msg: "Hello World"\n';
 
-        return App.ScriptAddView = PanelView.extend({
+        return App.ScriptAddComponent = ControlledComponent.extend({
 
-
-            //
             //
             //  Properties
             //
-            //
 
+            layoutName: 'script_add',
+            controllerName: 'scriptAddController',
 
             scriptTypes: [{
                 label: 'Ansible Playbook',
@@ -35,7 +34,6 @@ define('app/views/script_add', ['app/views/panel'],
                 label: 'Executable',
                 value: 'executable'
             }],
-
 
             scriptSources: [{
                 label: 'Github',
@@ -48,15 +46,11 @@ define('app/views/script_add', ['app/views/panel'],
                 value: 'inline'
             }],
 
-
-            //
             //
             //  Computed Properties
             //
-            //
 
-
-            isReady: function () {
+            isReady: function() {
                 var script = Mist.scriptAddController.get('newScript');
                 var name = script.get('name');
                 var type = script.get('type');
@@ -74,30 +68,77 @@ define('app/views/script_add', ['app/views/panel'],
                 'Mist.scriptAddController.newScript.script'
             ),
 
+            isInline: function() {
+                return Mist.scriptAddController.newScript.source.value == 'inline';
+            }.property('Mist.scriptAddController.newScript.source'),
 
-            //
+            isURL: function() {
+                return Mist.scriptAddController.newScript.source.value == 'url';
+            }.property('Mist.scriptAddController.newScript.source'),
+
+            isGitHub: function() {
+                return Mist.scriptAddController.newScript.source.value == 'github';
+            }.property('Mist.scriptAddController.newScript.source'),
+
+            load: function() {
+                Ember.run.next(function() {
+                    $("#add-script").collapsible({
+                        expand: function(event, ui) {
+                            Mist.scriptAddController.open();
+
+                            var id = $(this).attr('id'),
+                                overlay = id ? $('#' + id + '-overlay') : false;
+                            if (overlay) {
+                                overlay.removeClass('ui-screen-hidden').addClass('in');
+                            }
+                            $(this).children().next().hide();
+                            $(this).children().next().slideDown(250);
+                        }
+                    });
+                });
+            }.on('didInsertElement'),
+
+
+            unload: function() {
+                Ember.run.next(function() {
+                    $("#add-script").collapsible({
+                        collapse: function(event, ui) {
+                            Mist.scriptAddController.close();
+
+                            $(this).children().next().slideUp(250);
+                            var id = $(this).attr('id'),
+                                overlay = id ? $('#' + id + '-overlay') : false;
+                            if (overlay) {
+                                overlay.removeClass('in').addClass('ui-screen-hidden');
+                            }
+                        }
+                    });
+                });
+            }.on('willDestroyElement'),
+
+
             //
             //  Methods
             //
-            //
 
-
-            clear: function () {
-                this.$('.source').hide();
-                this.$('#script-add-description').hide();
-                this.closeTypeSelect();
-                this.closeSourceSelect();
+            clear: function() {
+                this.closeDropdown('type');
+                this.closeDropdown('source');
             },
 
+            renderFields: function() {
+                Ember.run.schedule('afterRender', this, function() {
+                    $('body').enhanceWithin();
+                });
+            },
 
-            selectType: function (type) {
-                this.closeTypeSelect();
+            selectType: function(type) {
+                this.closeDropdown('type');
                 Mist.scriptAddController.get('newScript').set('type', type);
                 this.setScript();
             },
 
-
-            setScript: function () {
+            setScript: function() {
                 var newScript = Mist.scriptAddController.get('newScript');
                 var type = newScript.get('type');
                 if (type.value == 'ansible')
@@ -106,9 +147,8 @@ define('app/views/script_add', ['app/views/panel'],
                     newScript.set('script', DEFAULT_SCRIPT);
             },
 
-
-            selectSource: function (source) {
-                this.closeSourceSelect();
+            selectSource: function(source) {
+                this.closeDropdown('source');
                 this.showSourceBundle(source);
                 var newScript = Mist.scriptAddController.get('newScript');
                 newScript.set('source', source);
@@ -118,48 +158,42 @@ define('app/views/script_add', ['app/views/panel'],
                     newScript.set('url', DEFAULT_GITHUB_URL);
                 if (source.value == 'inline')
                     this.setScript();
+
+                this.renderFields();
             },
 
-
-            closeTypeSelect: function () {
-                this.$('#script-add-type .mist-select').collapsible('collapse');
+            closeDropdown: function(el) {
+                this.$('#script-add-' + el + ' .mist-select').collapsible('collapse');
             },
 
-
-            closeSourceSelect: function () {
-                this.$('#script-add-source .mist-select').collapsible('collapse');
-            },
-
-
-            showSourceBundle: function (source) {
-                this.$('.source').hide();
-                this.$('.'+source.value).slideDown();
+            showSourceBundle: function(source) {
+                this.$('.' + source.value).slideDown();
                 this.$('#script-add-description').slideDown();
             },
 
 
             //
-            //
             //  Actions
             //
-            //
-
 
             actions: {
+                clickOverlay: function() {
+                    $('#add-script').collapsible('collapse');
+                },
 
-                selectType: function (type) {
+                selectType: function(type) {
                     this.selectType(type);
                 },
 
-                selectSource: function (source) {
+                selectSource: function(source) {
                     this.selectSource(source);
                 },
 
-                backClicked: function () {
+                backClicked: function() {
                     Mist.scriptAddController.close();
                 },
 
-                addClicked: function () {
+                addClicked: function() {
                     Mist.scriptAddController.add();
                 }
             },

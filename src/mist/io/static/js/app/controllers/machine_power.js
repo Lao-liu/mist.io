@@ -7,43 +7,42 @@ define('app/controllers/machine_power', ['ember'],
     function () {
         return Ember.Object.extend(Ember.Evented, {
 
-            /**
-             *  Properties
-             */
+            //
+            //  Properties
+            //
 
             machines: [],
             callback: null,
             canStart: null,
             canReboot: null,
+            canUndefine: null,
+            canSuspend: null,
+            canResume: null,
             canDestroy: null,
             canShutdown: null,
             canRename: null,
+            canRunScript: null,
 
 
-            /**
-             *
-             *  Methods
-             *
-             */
+            //
+            //  Methods
+            //
 
             open: function (machines, callback) {
                 this._clear();
                 this.set('callback', callback);
                 this.set('machines', machines instanceof Array ? machines : [machines]);
-                Ember.run.next(function () {
-                    $('#machine-power-popup').popup('open');
+                Ember.run.next(this, function () {
+                    $('#machine-power-popup').popup().popup('open');
                 });
             },
-
 
             close: function () {
                 $('#machine-power-popup').popup('close');
                 this._clear();
             },
 
-
             act: function (action) {
-
                 // Close current popup
                 $('#machine-power-popup').popup('close');
 
@@ -55,7 +54,14 @@ define('app/controllers/machine_power', ['ember'],
                     this.close();
                     Ember.run.later(function(){
                         Mist.machineEditController.open(machine);
-                    },350)
+                    }, 350)
+                    return;
+                }
+                if (action == 'script'){
+                    var machine = this.machines[0];
+                    Ember.run.later(function(){
+                        Mist.machineRunScriptController.open(machine);
+                    }, 350)
                     return;
                 }
                 Ember.run.later(function () {
@@ -64,8 +70,7 @@ define('app/controllers/machine_power', ['ember'],
                         head: 'Machine action',
                         body: [
                             {
-                                paragraph: 'Are you sure you want to ' + action + ' these machines: ' +
-                                    machineNames + ' ?'
+                                paragraph: 'Are you sure you want to ' + action + ' ' + (that.machines.length > 1 ? 'these machines: ' : 'this machine: ') + machineNames + ' ?'
                             }
                         ],
                         callback: function (didConfirm) {
@@ -78,11 +83,9 @@ define('app/controllers/machine_power', ['ember'],
             },
 
 
-            /**
-             *
-             *  Pseudo-Private Methods
-             *
-             */
+            //
+            //  Pseudo-Private Methods
+            //
 
             _clear: function () {
                 Ember.run(this, function () {
@@ -91,32 +94,42 @@ define('app/controllers/machine_power', ['ember'],
                     this.set('canStart', null);
                     this.set('canReboot', null);
                     this.set('canDestroy', null);
+                    this.set('canSuspend', null);
+                    this.set('canUndefine', null);
+                    this.set('canResume', null);
                     this.set('canShutdown', null);
                     this.set('canRename', null);
+                    this.set('canRunScript', null);
                 });
             },
-
 
             _updateActions: function () {
                 Ember.run(this, function () {
                     this.set('canStart', !this.machines.findBy('can_start', false));
                     this.set('canReboot', !this.machines.findBy('can_reboot', false));
+                    this.set('canUndefine', !this.machines.findBy('can_undefine', false));
+                    this.set('canResume', !this.machines.findBy('can_resume', false));
+                    this.set('canSuspend', !this.machines.findBy('can_suspend', false));
                     this.set('canDestroy', !this.machines.findBy('can_destroy', false));
                     this.set('canShutdown', !this.machines.findBy('can_stop', false));
-                    if(this.machines.length == 1 && this.machines[0].get('can_rename')){
+                    if(this.machines.length == 1 && this.machines[0].get('can_rename')) {
                         this.set('canRename', true);
-                    }else{
+                    } else {
                         this.set('canRename', false);
+                    }
+
+                    if(this.machines.length == 1 && this.machines[0].get('hasKeys')) {
+                        this.set('canRunScript', true);
+                    } else {
+                        this.set('canRunScript', false);
                     }
                     this.trigger('onActionsChange');
                 });
             },
 
-
             _giveCallback: function (success, action) {
                 if (this.callback) this.callback(success, action);
             },
-
 
             _act: function (action) {
                 this.machines.forEach(function (machine) {
@@ -126,6 +139,12 @@ define('app/controllers/machine_power', ['ember'],
                         machine.destroy();
                     } else if (action == 'reboot') {
                         machine.reboot();
+                    } else if (action == 'undefine') {
+                        machine.undefine();
+                    } else if (action == 'suspend') {
+                        machine.suspend();
+                    } else if (action == 'resume') {
+                        machine.resume();
                     } else if (action == 'start') {
                         machine.start();
                     }
@@ -133,11 +152,9 @@ define('app/controllers/machine_power', ['ember'],
             },
 
 
-            /**
-             *
-             *  Observers
-             *
-             */
+            //
+            //  Observers
+            //
 
             machinesObserver: function () {
                 Ember.run.once(this, '_updateActions');

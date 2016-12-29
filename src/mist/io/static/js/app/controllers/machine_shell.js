@@ -20,12 +20,12 @@ define('app/controllers/machine_shell', ['app/models/command', 'ember' , 'term']
             isOpen: null,
             machine: null,
 
+
             //
             //  Methods
             //
 
             open: function (machine) {
-
                 this._clear();
                 this.setProperties({
                     machine: machine,
@@ -42,9 +42,7 @@ define('app/controllers/machine_shell', ['app/models/command', 'ember' , 'term']
                     this.view.open();
                 else
                     this.close();
-
             },
-
 
             connect: function () {
                 var that = this;
@@ -78,9 +76,9 @@ define('app/controllers/machine_shell', ['app/models/command', 'ember' , 'term']
                         });
 
                         Mist.shell.emit('shell_open', {
-                            backend_id: that.machine.backend.id,
+                            cloud_id: that.machine.cloud.id,
                             machine_id: that.machine.id,
-                            provider: that.machine.backend.provider,
+                            provider: that.machine.cloud.provider,
                             host: that.host,
                             cols: that.cols,
                             rows: that.rows,

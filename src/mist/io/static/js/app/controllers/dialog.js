@@ -21,9 +21,11 @@ define('app/controllers/dialog', ['ember'],
             view: null,
             callback: null,
             options: Ember.Object.create({
+                size: null,
                 head: null,
                 body: null,
                 type: null,
+                danger: null
             }),
 
 
@@ -77,6 +79,7 @@ define('app/controllers/dialog', ['ember'],
                     head: null,
                     body: null,
                     type: null,
+                    danger: null
                 });
             },
 
@@ -84,14 +87,16 @@ define('app/controllers/dialog', ['ember'],
             _parseArgs: function (args) {
                 this.setProperties({
                     type: args.type,
-                    callback: args.callback,
+                    callback: args.callback
                 });
                 this.options.setProperties({
+                    size: args.size ? args.size : 'small-modal',
                     head: args.head,
                     body: args.body,
                     type: args.type,
+                    danger: (args.danger !== undefined ? args.danger : true)
                 });
             }
         });
-    }
+}
 );

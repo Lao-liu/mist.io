@@ -12,6 +12,7 @@ from mist.io.resources import Root
 from mist.io import config
 
 import logging
+
 logging.basicConfig(level=config.PY_LOG_LEVEL,
                     format=config.PY_LOG_FORMAT,
                     datefmt=config.PY_LOG_FORMAT_DATE)
@@ -43,9 +44,9 @@ def main(global_config, **settings):
 
         from mist.io.model import Machine
         with user.lock_n_load():
-            for backend in user.backends.values():
-                if 'list_of_machines' in backend._dict:
-                    list_of_machines = backend._dict['list_of_machines']
+            for cloud in user.clouds.values():
+                if 'list_of_machines' in cloud._dict:
+                    list_of_machines = cloud._dict['list_of_machines']
                     for old_machine in list_of_machines:
                         machine_id = old_machine.get('id')
                         machine_hostname = old_machine.get('hostname')
@@ -54,13 +55,13 @@ def main(global_config, **settings):
                         if not machine_id or not machine_hostname:
                             print " *** ERROR MIGRATING, SKIPPING *** "
                             continue
-                        if machine_id not in backend.machines:
-                            backend.machines[machine_id] = Machine()
-                        machine = backend.machines[machine_id]
+                        if machine_id not in cloud.machines:
+                            cloud.machines[machine_id] = Machine()
+                        machine = cloud.machines[machine_id]
                         machine.dns_name = machine_hostname
                         machine.public_ips.append(machine_hostname)
                         machine.name = machine_hostname
-                    del backend._dict['list_of_machines']
+                    del cloud._dict['list_of_machines']
             user.save()
     except IOError as exc:
         # settings.yaml doesn't exist, continue
@@ -73,6 +74,7 @@ def main(global_config, **settings):
 
     def string_adapter(obj, request):
         return str(obj)
+
     json_renderer.add_adapter(object, string_adapter)
     configurator.add_renderer('json', json_renderer)
     configurator.add_static_view('resources', 'mist.io:static')
@@ -95,47 +97,67 @@ def add_routes(configurator):
     """
 
     configurator.add_route('home', '/')
+    configurator.add_route('api_v1_providers', '/api/v1/providers')
     configurator.add_route('providers', '/providers')
-    configurator.add_route('backends', '/backends')
-    configurator.add_route('backend_action', '/backends/{backend}')
+    configurator.add_route('api_v1_clouds', '/api/v1/clouds')
+    configurator.add_route('clouds', '/clouds')
+    configurator.add_route('api_v1_cloud_action', '/api/v1/clouds/{cloud}')
+    configurator.add_route('cloud_action', '/clouds/{cloud}')
 
-    configurator.add_route('machines', '/backends/{backend}/machines')
-    configurator.add_route('machine', '/backends/{backend}/machines/{machine}')
-    configurator.add_route('machine_rdp',
-                           '/backends/{backend}/machines/{machine}/rdp')
-    configurator.add_route('machine_metadata',
-                           '/backends/{backend}/machines/{machine}/metadata')
-    configurator.add_route('probe',
-                           '/backends/{backend}/machines/{machine}/probe')
+    configurator.add_route('api_v1_machines', '/api/v1/clouds/{cloud}/machines')
+    configurator.add_route('machines', '/clouds/{cloud}/machines')
+    configurator.add_route('api_v1_machine', '/api/v1/clouds/{cloud}/machines/{machine}')
+    configurator.add_route('machine', '/clouds/{cloud}/machines/{machine}')
+    configurator.add_route('api_v1_machine_rdp', '/api/v1/clouds/{cloud}/machines/{machine}/rdp')
+    configurator.add_route('machine_rdp', '/clouds/{cloud}/machines/{machine}/rdp')
+    configurator.add_route('api_v1_machine_tags', '/api/v1/clouds/{cloud}/machines/{machine}/tags')
+    configurator.add_route('machine_tags', '/clouds/{cloud}/machines/{machine}/tags')
+    configurator.add_route('api_v1_machine_tag', '/api/v1/clouds/{cloud}/machines/{machine}/tags/{tag}')
+    configurator.add_route('machine_tag', '/clouds/{cloud}/machines/{machine}/tags/{tag}')
+    configurator.add_route('api_v1_probe', '/api/v1/clouds/{cloud}/machines/{machine}/probe')
+    configurator.add_route('probe', '/clouds/{cloud}/machines/{machine}/probe')
 
+    configurator.add_route('api_v1_monitoring', '/api/v1/monitoring')
     configurator.add_route('monitoring', '/monitoring')
-    configurator.add_route('update_monitoring',
-                           '/backends/{backend}/machines/{machine}/monitoring')
-    configurator.add_route('stats',
-                           '/backends/{backend}/machines/{machine}/stats')
-    configurator.add_route('metrics',
-                           '/backends/{backend}/machines/{machine}/metrics')
+    configurator.add_route('api_v1_update_monitoring', '/api/v1/clouds/{cloud}/machines/{machine}/monitoring')
+    configurator.add_route('update_monitoring', '/clouds/{cloud}/machines/{machine}/monitoring')
+    configurator.add_route('api_v1_stats', '/api/v1/clouds/{cloud}/machines/{machine}/stats')
+    configurator.add_route('stats', '/clouds/{cloud}/machines/{machine}/stats')
+    configurator.add_route('api_v1_metrics', '/api/v1/clouds/{cloud}/machines/{machine}/metrics')
+    configurator.add_route('metrics', '/clouds/{cloud}/machines/{machine}/metrics')
+    configurator.add_route('api_v1_metric', '/api/v1/metrics/{metric}')
     configurator.add_route('metric', '/metrics/{metric}')
-    configurator.add_route(
-        'deploy_plugin',
-        '/backends/{backend}/machines/{machine}/plugins/{plugin}'
-    )
+    configurator.add_route('api_v1_deploy_plugin', '/api/v1/clouds/{cloud}/machines/{machine}/plugins/{plugin}')
+    configurator.add_route('deploy_plugin', '/clouds/{cloud}/machines/{machine}/plugins/{plugin}')
 
-    configurator.add_route('images', '/backends/{backend}/images')
-    configurator.add_route('image', '/backends/{backend}/images/{image:.*}')
-    configurator.add_route('sizes', '/backends/{backend}/sizes')
-    configurator.add_route('locations', '/backends/{backend}/locations')
-    configurator.add_route('networks', '/backends/{backend}/networks')
-    configurator.add_route('network', '/backends/{backend}/networks/{network}')
+    configurator.add_route('api_v1_images', '/api/v1/clouds/{cloud}/images')
+    configurator.add_route('images', '/clouds/{cloud}/images')
+    configurator.add_route('api_v1_image', '/api/v1/clouds/{cloud}/images/{image:.*}')
+    configurator.add_route('image', '/clouds/{cloud}/images/{image:.*}')
+    configurator.add_route('api_v1_sizes', '/api/v1/clouds/{cloud}/sizes')
+    configurator.add_route('sizes', '/clouds/{cloud}/sizes')
+    configurator.add_route('api_v1_locations', '/api/v1/clouds/{cloud}/locations')
+    configurator.add_route('locations', '/clouds/{cloud}/locations')
+    configurator.add_route('api_v1_networks', '/api/v1/clouds/{cloud}/networks')
+    configurator.add_route('networks', '/clouds/{cloud}/networks')
+    configurator.add_route('api_v1_network', '/api/v1/clouds/{cloud}/networks/{network}')
+    configurator.add_route('network', '/clouds/{cloud}/networks/{network}')
 
+    configurator.add_route('api_v1_keys', '/api/v1/keys')
     configurator.add_route('keys', '/keys')
+    configurator.add_route('api_v1_key_action', '/api/v1/keys/{key}')
     configurator.add_route('key_action', '/keys/{key}')
+    configurator.add_route('api_v1_key_public', '/api/v1/keys/{key}/public')
     configurator.add_route('key_public', '/keys/{key}/public')
-    configurator.add_route('key_private', 'keys/{key}/private')
-    configurator.add_route('key_association',
-                           '/backends/{backend}/machines/{machine}/keys/{key}')
+    configurator.add_route('api_v1_key_private', '/api/v1/keys/{key}/private')
+    configurator.add_route('key_private', '/keys/{key}/private')
+    configurator.add_route('api_v1_key_association', '/api/v1/clouds/{cloud}/machines/{machine}/keys/{key}')
+    configurator.add_route('key_association', '/clouds/{cloud}/machines/{machine}/keys/{key}')
 
+    configurator.add_route('api_v1_rules', '/api/v1/rules')
     configurator.add_route('rules', '/rules')
+    configurator.add_route('api_v1_rule', '/api/v1/rules/{rule}')
     configurator.add_route('rule', '/rules/{rule}')
+    configurator.add_route('api_v1_check_auth', '/api/v1/auth')
     configurator.add_route('check_auth', '/auth')
     configurator.add_route('account', '/account')
